@@ -90,3 +90,9 @@ Qwen2.5-1.5B-Instruct, val 200, k=8, T=1. Probe scorer, NOT the reward. 50 min, 
 - batch 32 x ~1000-token prompts OOMs in HF prefill; GRPO group 16 will not fit as one batch.
 Conclusion: large headroom. SFT warm-up mandatory; reward needs partial credit (per-field
 fraction + draft checks), not all-or-nothing.
+
+## Standalone setup (2026-10-14)
+- Own git repo (local only, not pushed). Own env: `~/.local/bin/uv sync` -> `.venv` (torch 2.14.1+cu130,
+  transformers 5.18.0). Base weights copied to `~/models/Qwen2.5-1.5B-Instruct` (see `.env.example`).
+- `sft_chain.sh` run of 10-14 still used `../rl-lisp-python/.venv` + its hf_cache (started before the
+  split); switch it to `.venv/bin/python` + `$MODEL` once that run ends. jax gets added when GRPO lands.
