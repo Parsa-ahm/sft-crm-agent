@@ -4,4 +4,3 @@ __pycache__/
 ckpt/
 *.pid
 *.log
-_reference/

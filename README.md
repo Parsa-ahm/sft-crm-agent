@@ -55,7 +55,7 @@ All data is synthetic, generated so that labels are known by construction rather
 
 1. **Gold record first.** A Python generator samples a record: message kind (weights 34/24/14/13/9/6
    for the kinds in table order), sender, vehicle, part and all field values. Vehicle make, model and
-   engine codes come from a real parts-fitment table (`data/vehicle-overrides.json`); names, prices,
+   engine codes come from a real parts-fitment table; names, prices,
    order numbers, PRO numbers and postal codes are random. The generator also decides which facts the
    message states, the draft recipient, which gold fields the draft must contain
    (`draft_require`) and which it must not (`draft_forbid`).
@@ -73,10 +73,9 @@ All data is synthetic, generated so that labels are known by construction rather
 | `data/sft.jsonl` | 300 | Gemma 4 31B (`google/gemma-4-31b-it`) | training |
 | `data/val.jsonl` | 200 | Gemma 4 31B | development; all tuning decisions |
 | `data/test.jsonl` | 330 | Kimi K3 (`moonshotai/kimi-k3`), different seed | final numbers only |
-| `data/rl.jsonl` | 2,800 | Gemma 4 31B | unused here (reserved for RL) |
 
-`data/sft_all.jsonl` is `sft` + `rl`. `data/train_raw.jsonl` and `data/test_raw.jsonl` hold the raw
-generations with verifier verdicts.
+A further 2,800 Gemma-written rows (reserved for RL), the raw generations with verifier verdicts,
+the fitment table and the generation code are kept at git tag `reference-v1`.
 
 The test set is written by a different model family than the training and validation sets, so it
 measures whether the fine-tuned model learned the task or the training writer's phrasing. Test
