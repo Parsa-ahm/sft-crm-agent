@@ -1,6 +1,6 @@
-# crm-extract-rl
+# sft-crm-agent
 
-**Fine-tuning Qwen2.5-1.5B to turn a parts broker's inbox into CRM records and policy-compliant draft replies**
+**Fine-tuning Qwen2.5-1.5B to use as the model for an agentic workflow that takes text inputs from email and text and adds it to a custom CRM and drafts future responses.**
 
 ## Abstract
 
@@ -10,9 +10,9 @@ structured-generation task: one inbound message in, one JSON object out, holding
 a next action, and a draft reply that must follow two confidentiality rules (customers never see the
 yard's price or name; yards never see the customer's budget). We fine-tune Qwen2.5-1.5B-Instruct with
 LoRA on 300 synthetic examples, using a trainer and evaluator written from scratch. On 330 held-out
-messages written by a different model than the training data, the fine-tuned model passes 96.7% of
+messages written by a different model than the training data, the fine-tuned model passes 97.0% of
 messages end to end (all fields, next action and draft correct), against 4.2% before fine-tuning,
-48.8% for gpt-oss-20b zero-shot, 83.6% for gpt-oss-20b with six in-context examples, and 82.1% for
+49.1% for gpt-oss-20b zero-shot, 84.8% for gpt-oss-20b with six in-context examples, and 84.2% for
 Nemotron-3.5-Lightning (30B-A3B). It invents a field value on 0.3% of messages. Training takes 10.3
 minutes on one 8 GB consumer GPU.
 
@@ -105,24 +105,30 @@ On an RTX 2070 Super (8 GB) training takes 10.3 minutes with 3.78 GB peak memory
 
 ### 3.2 Evaluation
 
-`eval.py` generates greedily (fp16, batch 16, up to 512 new tokens) and scores each output against
-its gold record. The first `{` to the last `}` of the output is parsed as JSON. Then:
+`generate.py` runs a model over a split and saves its raw outputs; local models decode greedily
+(fp16, batch 16, up to 512 new tokens). `eval.py` scores each output against its gold record. Typographic
+hyphens and spaces (U+2010–U+2013, U+00A0, U+202F) are mapped to ASCII, then the first `{` to the last
+`}` of the output is parsed as JSON. Then:
 
 - **Fields.** All 23 fields are normalised before comparison: integers are parsed from text ("62k",
   "$1,400"); IDs and postal codes ignore spaces, hyphens and case; phone numbers compare on their last
-  ten digits; dates compare as ISO dates; strings compare case-insensitively; `""`, `"none"`,
+  ten digits; dates compare as ISO dates; common make abbreviations map to the full name (`VW` →
+  `Volkswagen`, `Mercedes` → `Mercedes-Benz`, `Chevy` → `Chevrolet`); strings compare case-insensitively; `""`, `"none"`,
   `"n/a"`, `"unknown"` count as null. A field is **hallucinated** if gold is null and the prediction
   is not, **omitted** in the reverse case.
 - **next_action** must match exactly.
 - **Draft.** Fails if the recipient is wrong, a `draft_require` field is absent from the body, a
   `draft_forbid` field is present, a yard offer lacks `[PRICE]`, or the body contains any number
-  greater than 31 that does not appear in the inbound message. Numbers are matched as whole tokens,
-  dates in several written forms ("May 7", "May. 7", "5/7"), parts through a synonym list ("tranny"
-  for transmission).
+  greater than 31 that does not appear in the inbound message. Numbers are matched as whole tokens
+  (a glued unit still ends the number: `90,000km` is 90000), dates in several written forms ("May 7",
+  "May. 7", "5/7"), makes with their abbreviations, parts through a synonym list ("tranny" for
+  transmission).
 - **Full pass** requires all 23 fields, `next_action` and the draft to be correct.
 
-The scorer was checked against an independently written reference scorer: identical verdicts on
-800/800 outputs from four models.
+Before the unit, hyphen and make-alias handling was added, the scorer was checked against an
+independently written reference scorer: identical verdicts on 800/800 outputs from four models. Adding
+those three rules turned 13 failures into passes across all systems (fine-tuned 1, gpt-oss 0-shot 1,
+gpt-oss 6-shot 4, Nemotron 7) and no pass into a failure.
 
 ### 3.3 Baselines
 
@@ -135,7 +141,7 @@ The scorer was checked against an independently written reference scorer: identi
 
 All baselines receive the same system instruction and are decoded at temperature 0. API models get
 1,024 output tokens, except Nemotron, which needs 16,384 because its reasoning trace counts against
-the limit. Few-shot examples come from `sft.jsonl` only. Every output is re-scored by `eval.py`.
+the limit. Few-shot examples come from `sft.jsonl` only. `bench.py` scores every system's run file with the same `eval.py`.
 
 ## 4. Results
 
@@ -145,25 +151,25 @@ All numbers are on the 330-message held-out test set. Single run per system.
 
 | system | full pass | 95% CI | all fields | next_action | draft ok | valid JSON | ≥1 hallucinated field | prompt tokens |
 |---|---|---|---|---|---|---|---|---|
-| **Qwen2.5-1.5B + SFT (ours)** | **96.7%** | 94.1–98.1 | **97.3%** | **100%** | **98.8%** | 100% | **0.3%** | 976 |
-| Qwen2.5-1.5B-Instruct | 4.2% | 2.5–7.0 | 18.2% | 91.5% | 19.7% | 100% | 54.8% | 976 |
-| gpt-oss-20b, zero-shot | 48.8% | 43.4–54.2 | 76.4% | 97.0% | 62.1% | 97.0% | 2.4% | 1,002 |
-| gpt-oss-20b, 6-shot | 83.6% | 79.3–87.2 | 94.2% | 100% | 87.9% | 100% | 0.6% | 3,172 |
-| Nemotron-3.5-Lightning | 82.1% | 77.6–85.9 | 87.3% | 99.7% | 93.6% | 100% | 4.5% | 1,014 |
+| **Qwen2.5-1.5B + SFT (ours)** | **97.0%** | 94.5–98.3 | **97.6%** | **100%** | **99.1%** | 100% | **0.3%** | 976 |
+| Qwen2.5-1.5B-Instruct | 4.2% | 2.5–7.0 | 18.2% | 91.5% | 20.0% | 100% | 54.8% | 976 |
+| gpt-oss-20b, zero-shot | 49.1% | 43.7–54.5 | 77.3% | 97.0% | 62.4% | 97.0% | 2.4% | 1,002 |
+| gpt-oss-20b, 6-shot | 84.8% | 80.6–88.3 | 94.8% | 100% | 89.4% | 100% | 0.6% | 3,172 |
+| Nemotron-3.5-Lightning | 84.2% | 79.9–87.8 | 88.2% | 99.7% | 96.1% | 100% | 4.5% | 1,014 |
 
 95% CI: Wilson interval on full pass. Prompt tokens: mean input length per message in each model's
 own tokenizer. Mean output length: 238 tokens for the fine-tuned model; 343 (gpt-oss zero-shot), 242
 (gpt-oss 6-shot) and 4,027 (Nemotron) completion tokens for the API models, including reasoning.
 
-On paired outcomes, the fine-tuned model passes 52 messages that gpt-oss-20b 6-shot fails and fails
-9 that it passes (exact McNemar p = 1.8e-8); against Nemotron the split is 56 to 8 (p = 5.6e-10).
+On paired outcomes, the fine-tuned model passes 49 messages that gpt-oss-20b 6-shot fails and fails
+9 that it passes (exact McNemar p = 9e-8); against Nemotron the split is 50 to 8 (p = 1.6e-8).
 
 ### 4.2 Full pass by message kind
 
 | kind | n | SFT (ours) | base | gpt-oss 0-shot | gpt-oss 6-shot | Nemotron |
 |---|---|---|---|---|---|---|
-| quote_request | 104 | 95.2% | 7.7% | 66.3% | 66.3% | 78.8% |
-| yard_offer | 74 | 97.3% | 0.0% | 5.4% | 85.1% | 89.2% |
+| quote_request | 104 | 96.2% | 7.7% | 67.3% | 67.3% | 81.7% |
+| yard_offer | 74 | 97.3% | 0.0% | 5.4% | 89.2% | 94.6% |
 | where_is_my_part | 64 | 96.9% | 0.0% | 68.8% | 93.8% | 79.7% |
 | freight_update | 38 | 100% | 10.5% | 34.2% | 94.7% | 84.2% |
 | warranty_claim | 30 | 96.7% | 3.3% | 63.3% | 100% | 86.7% |
@@ -181,17 +187,17 @@ Counts are messages (out of 330) with each failure; a message can have several.
   mislabels `sender_type` (50) and produces malformed JSON on 10 messages (all ten drop the final
   closing brace).
 - **gpt-oss-20b 6-shot** fixes the yard offers but still tells the yard the customer's budget in 28
-  quote-request drafts, which accounts for most of its quote-request failures (66.3%).
+  quote-request drafts, which accounts for most of its quote-request failures (67.3%).
 - **Nemotron-3.5-Lightning** follows the draft rules but extracts less reliably: `sender_type` (20)
   and `sender_name` (16) errors, and 15 messages with an invented field. Fourteen of the 15 come from
   repair shops: it fills `sender_name` on unsigned shop texts or treats the shop as a yard
   (`yard_name`).
-- **Fine-tuned model (11 failures).** Missed budget stated as "try to keep it under 2000 bucks";
-  wrote `"VW"` for Volkswagen; `"bumper"` instead of the canonical `"front bumper"`; copied an email
+- **Fine-tuned model (10 failures).** Missed budget stated as "try to keep it under 2000 bucks";
+  `"bumper"` instead of the canonical `"front bumper"`; copied an email
   address with one letter dropped; confused `shop` and `individual` (once in each direction); wrote a
 first name only (`"Dave"` for `"Dave Ali"`); `wrong_part` instead of
   `damaged` for a part that "showed up cracked"; a draft that left out the vehicle year (twice) or
-  model and mileage limit; one invented postal code. Five of the 11 are passed by all three API
+  model and mileage limit; one invented postal code. Five of the 10 are passed by all three API
   baselines.
 
 ## 5. Examples
@@ -427,8 +433,8 @@ Wei
 |---|---|
 | Qwen2.5-1.5B + SFT (this work) | pass |
 | Qwen2.5-1.5B-Instruct, zero-shot | `sender_type` "individual" (gold "shop"); draft addressed to the wrong party; draft reveals `budget` |
-| gpt-oss-20b, zero-shot | `sender_type` "individual" (gold "shop"); draft omits `vehicle_model`; draft reveals `budget` |
-| gpt-oss-20b, 6-shot | draft omits `vehicle_model`; draft reveals `budget` |
+| gpt-oss-20b, zero-shot | `sender_type` "individual" (gold "shop"); draft reveals `budget` |
+| gpt-oss-20b, 6-shot | draft reveals `budget` |
 | Nemotron-3.5-Lightning, zero-shot | pass |
 
 <details><summary>Qwen2.5-1.5B + SFT (this work): output</summary>
@@ -1225,13 +1231,10 @@ hey its the guy from Sarnia Tire & Auto, we got a 2022 Land Rover Discovery sitt
   scorer checks rules, not tone or helpfulness.
 - **Single seed.** One training run and one decoding pass per system. The confidence intervals
   cover test-set sampling only, not training variance.
-- **Scorer strictness.** Two scorer limitations penalise baselines on a few messages: a number
-  written against its unit (`90,000km`) is read as 90, and gpt-oss writes non-breaking hyphens
-  (`CR‑V`, U+2011) that do not match `CR-V`. Correcting both raises gpt-oss-20b 0-shot to 49.1%,
-  6-shot to 84.5% and Nemotron to 83.3%; the fine-tuned model is unchanged. The reported numbers use
-  the unmodified scorer. Make aliases are not normalised (`VW` vs `Volkswagen`, `mercedes` vs
-  `Mercedes-Benz`); every system gets `vehicle_make` wrong on test message 237
-  for this reason.
+- **Scorer coverage.** The scorer is rule-based. Three rules (glued units, typographic hyphens, make
+  abbreviations) were added after the first scoring pass, once inspection showed they rejected correct
+  outputs; section 3.2 lists their effect. Other correct paraphrases may still be rejected, e.g. a
+  carrier written as "Purolator" for "Purolator Freight".
 - **Baselines.** Prompts were not tuned per model; the baselines use the system instruction written
   for the fine-tuned model. Nemotron and gpt-oss run with reasoning, which the fine-tuned model does
   not use. A DeepSeek-V4.1-Flash run was dropped after the API timed out repeatedly (54 of 330
@@ -1248,31 +1251,32 @@ uv sync                                    # torch 2.14.1+cu130, transformers 5.
 # set MODEL in train.py to a local copy of Qwen/Qwen2.5-1.5B-Instruct (or its HF id)
 
 .venv/bin/python train.py --out ckpt/sft300                      # 10 min on an RTX 2070 Super
-.venv/bin/python eval.py --model ckpt/sft300 --data data/test.jsonl --out data/runs/sft_test.jsonl
-.venv/bin/python eval.py --model <base model path> --data data/test.jsonl --out data/runs/base_test.jsonl
+.venv/bin/python generate.py --model ckpt/sft300 --name sft
+.venv/bin/python generate.py --model <base model path> --name base
 
 # API baselines (NVIDIA NIM key in ~/.config/nim/api-key, or set NIM_KEY_FILE)
-.venv/bin/python bench_nim.py --model openai/gpt-oss-20b --cases data/test.jsonl
-.venv/bin/python bench_nim.py --model openai/gpt-oss-20b --cases data/test.jsonl --shots 6
-.venv/bin/python bench_nim.py --model nvidia/nemotron-3.5-lightning-30b-a3b --cases data/test.jsonl --max-tokens 16384
+.venv/bin/python generate.py --model nim:openai/gpt-oss-20b
+.venv/bin/python generate.py --model nim:openai/gpt-oss-20b --shots 6
+.venv/bin/python generate.py --model nim:nvidia/nemotron-3.5-lightning-30b-a3b --max-new 16384
 
-.venv/bin/python build_results.py          # re-scores all runs -> data/results/
+.venv/bin/python eval.py data/runs/sft_test.jsonl    # detailed report for one run
+.venv/bin/python bench.py                            # all runs -> data/results/ + the tables above
 ```
 
-`data/runs/` holds the raw outputs behind every number above; `build_results.py` regenerates
-`data/results/` from them without a GPU or API key (it loads only the tokenizer).
+`data/runs/` holds the raw outputs behind every number above; `bench.py` regenerates `data/results/`
+and the tables from them without a GPU or API key (it loads only the tokenizer).
 
 ## 8. Files
 
 | path | contents |
 |---|---|
 | `train.py` | LoRA SFT trainer, prompt format, system instruction |
-| `eval.py` | generation, JSON parsing, normalisation, draft checks, report |
-| `bench_nim.py` | API baseline runner (same prompt and scorer) |
-| `build_results.py` | re-scores every run into `data/results/` |
+| `generate.py` | runs one model (local checkpoint or NIM API) over a split, saves raw outputs |
+| `eval.py` | scorer: JSON parsing, normalisation, draft checks, per-run report |
+| `bench.py` | scores every run, writes `data/results/`, prints the results tables |
 | `data/*.jsonl` | splits (section 2); each row has `message`, `gold`, `next_action`, `draft_to`, `draft_require`, `draft_forbid`, `target` |
 | `data/runs/` | raw test outputs per system |
-| `data/results/` | re-scored outputs and `summary.json` |
+| `data/results/` | scored outputs and `summary.json` |
 
 The data pipeline (`records.py`,
 `gen_nim.py`, `finalize.py`, `qc.py`, `audit.py`) and an independent reference trainer and scorer are

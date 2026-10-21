@@ -1,12 +1,9 @@
 import argparse
 import json
-import time
 import re
 import datetime as dt
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from train import build_prompt, load_rows
+from train import load_rows
 
 FIELDS = ["intent", "sender_name", "sender_contact", "sender_type", "ref",
           "vehicle_year", "vehicle_make", "vehicle_model", "engine_code", "part", "part_position",
@@ -24,20 +21,10 @@ SYNONYMS = {
     "taillight": ["taillight", "tail light", "tail lamp", "taillamp"], "door": ["door"],
     "side mirror": ["mirror"], "front bumper": ["bumper"],
 }
-
-
-def generate(model, tok, rows, batch, max_new):
-    texts = []
-    for i in range(0, len(rows), batch):
-        prompts = [build_prompt(tok, r) for r in rows[i:i + batch]]
-        enc = tok(prompts, return_tensors= 'pt', padding = True, add_special_tokens=False).to("cuda")
-        with torch.no_grad():
-            out = model.generate(**enc, max_new_tokens = max_new, do_sample=False, pad_token_id = tok.pad_token_id)
-
-        new = out[:, enc["input_ids"].shape[1]:]
-        texts += tok.batch_decode(new, skip_special_tokens=True)
-        print(f"{len(texts)}/{len(rows)}", flush=True)
-    return texts
+MAKE_ALIASES = {"mercedes": "mercedes-benz", "benz": "mercedes-benz", "merc": "mercedes-benz",
+                "vw": "volkswagen", "chevy": "chevrolet", "alfa": "alfa romeo"}
+# non-breaking / typographic hyphens and spaces some models emit (gpt-oss writes "CR‑V")
+UNICODE = str.maketrans({"‐": "-", "‑": "-", "‒": "-", "–": "-", " ": " ", " ": " "})
 
 def parse(text):
     start = text.find("{")
@@ -54,7 +41,8 @@ def parse(text):
 
 def numbers_in(text):
     out = []
-    for m in re.finditer(r"(?<![\w.])\$?(\d[\d,]*(?:\.\d+)?)\s?([kK])?(?![\w])", text):
+    # "80k" = 80000; a unit glued to the number ("90,000km") still ends it
+    for m in re.finditer(r"(?<![\w.])\$?(\d[\d,]*(?:\.\d+)?)(?:\s?([kK])(?!\w)|(?=[kK][mM][sS]?\b)|(?!\w))", text):
         x = float(m.group(1).replace(",", ""))
         out.append(x * 1000 if m.group(2) else x)
     return out
@@ -83,6 +71,9 @@ def mentions(body, field, value):
         return any(f.lower() in low for f in date_forms(value))
     if field == "part":
         return any(w in low for w in SYNONYMS[value])
+    if field == "vehicle_make":
+        names = [value.lower()] + [a for a, full in MAKE_ALIASES.items() if full == value.lower()]
+        return any(re.search(rf"\b{re.escape(n)}\b", low) for n in names)
     return str(value).lower() in low
     
 
@@ -122,7 +113,9 @@ def norm(field, v):
             return dt.date.fromisoformat(s[:10]).isoformat()
         except ValueError:
             return s.lower()
-    return s.lower() 
+    if field == "vehicle_make":
+        return MAKE_ALIASES.get(s.lower(), s.lower())
+    return s.lower()
 
 def compare_fields(pred, gold):
     fields = {}
@@ -139,7 +132,7 @@ def compare_fields(pred, gold):
 
 
 def score(text, row):
-    p = parse(text)
+    p = parse(text.translate(UNICODE))
     if p is None:
         return {"valid": False, "fields_ok": False, "action_ok": False, "draft_ok": False,
                 "fields": {f: False for f in FIELDS}, "halluc": [], "omit": [], "draft_why": ["invalid_json"]}
@@ -175,30 +168,23 @@ def report(rows, scores):
         ks = [s for r, s in zip(rows, scores) if r["kind"] == kind]
         print(f"  {kind:18s} n={len(ks):3d}  full pass {pct([full_pass(s) for s in ks])}")
 
+def score_run(run_path, data_path):
+    """Score a generate.py output file against its split. Returns (rows, texts, scores) in run order."""
+    gold = {r["id"]: r for r in load_rows(data_path)}
+    recs = load_rows(run_path)
+    rows = [gold[r["id"]] for r in recs]
+    texts = [r["text"] for r in recs]
+    return rows, texts, [score(t, r) for t, r in zip(texts, rows)]
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True)
-    ap.add_argument("--data", default="data/val.jsonl")
-    ap.add_argument("--batch", type=int, default=16)
-    ap.add_argument("--max-new", type=int, default=512)
-    ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--out", default=None)
+    ap.add_argument("run", help="output of generate.py, e.g. data/runs/sft_test.jsonl")
+    ap.add_argument("--data", default="data/test.jsonl")
     args = ap.parse_args()
 
-    rows = load_rows(args.data)[: args.limit]
-    tok = AutoTokenizer.from_pretrained(args.model, padding_side= "left")
-    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.float16).to("cuda").eval()
-
-    t0 = time.time()
-    texts = generate(model, tok, rows, args.batch, args.max_new)
-    scores = [score(t, r) for t, r in zip(texts, rows)]
+    rows, _, scores = score_run(args.run, args.data)
     report(rows, scores)
-
-    if args.out:
-        with open(args.out, "w") as f:
-            for r, t, s in zip(rows, texts, scores):
-                f.write(json.dumps({"id": r["id"], "kind": r["kind"], "text": t, "score": s}) + "\n")
-        print("wrote", args.out)
 
 if __name__ == "__main__":
     main()

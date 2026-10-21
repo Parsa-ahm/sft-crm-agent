@@ -1,20 +1,24 @@
 {
  "sft": {
-  "label": "Qwen2.5-1.5B + LoRA SFT (this work)",
+  "label": "Qwen2.5-1.5B + SFT (ours)",
   "size": "1.5B",
   "n": 330,
   "prompt_tokens": 976,
   "valid": 1.0,
-  "fields": 0.9727272727272728,
+  "fields": 0.9757575757575757,
   "action": 1.0,
-  "draft": 0.9878787878787879,
-  "full": 0.9666666666666667,
+  "draft": 0.990909090909091,
+  "full": 0.9696969696969697,
+  "full_ci": [
+   0.9451256436752161,
+   0.9834584512967707
+  ],
   "halluc": 0.0030303030303030303,
   "omit": 0.0030303030303030303,
   "by_kind": {
    "cancel_request": 0.95,
    "freight_update": 1.0,
-   "quote_request": 0.9519230769230769,
+   "quote_request": 0.9615384615384616,
    "warranty_claim": 0.9666666666666667,
    "where_is_my_part": 0.96875,
    "yard_offer": 0.972972972972973
@@ -29,15 +33,19 @@
   }
  },
  "base": {
-  "label": "Qwen2.5-1.5B-Instruct, zero-shot",
+  "label": "Qwen2.5-1.5B-Instruct",
   "size": "1.5B",
   "n": 330,
   "prompt_tokens": 976,
   "valid": 1.0,
   "fields": 0.18181818181818182,
   "action": 0.9151515151515152,
-  "draft": 0.19696969696969696,
+  "draft": 0.2,
   "full": 0.04242424242424243,
+  "full_ci": [
+   0.025436583190641404,
+   0.069942782352778
+  ],
   "halluc": 0.5484848484848485,
   "omit": 0.20303030303030303,
   "by_kind": {
@@ -63,16 +71,20 @@
   "n": 330,
   "prompt_tokens": 1002,
   "valid": 0.9696969696969697,
-  "fields": 0.7636363636363637,
+  "fields": 0.7727272727272727,
   "action": 0.9696969696969697,
-  "draft": 0.6212121212121212,
-  "full": 0.48787878787878786,
+  "draft": 0.6242424242424243,
+  "full": 0.4909090909090909,
+  "full_ci": [
+   0.4373865322740492,
+   0.5446408723393962
+  ],
   "halluc": 0.024242424242424242,
   "omit": 0.03636363636363636,
   "by_kind": {
    "cancel_request": 0.6,
    "freight_update": 0.34210526315789475,
-   "quote_request": 0.6634615384615384,
+   "quote_request": 0.6730769230769231,
    "warranty_claim": 0.6333333333333333,
    "where_is_my_part": 0.6875,
    "yard_offer": 0.05405405405405406
@@ -92,19 +104,23 @@
   "n": 330,
   "prompt_tokens": 3172,
   "valid": 1.0,
-  "fields": 0.9424242424242424,
+  "fields": 0.9484848484848485,
   "action": 1.0,
-  "draft": 0.8787878787878788,
-  "full": 0.8363636363636363,
+  "draft": 0.8939393939393939,
+  "full": 0.8484848484848485,
+  "full_ci": [
+   0.8058039028116828,
+   0.8831455870062428
+  ],
   "halluc": 0.006060606060606061,
   "omit": 0.015151515151515152,
   "by_kind": {
    "cancel_request": 0.9,
    "freight_update": 0.9473684210526315,
-   "quote_request": 0.6634615384615384,
+   "quote_request": 0.6730769230769231,
    "warranty_claim": 1.0,
    "where_is_my_part": 0.9375,
-   "yard_offer": 0.8513513513513513
+   "yard_offer": 0.8918918918918919
   },
   "kind_n": {
    "cancel_request": 20,
@@ -116,24 +132,28 @@
   }
  },
  "nemotron": {
-  "label": "Nemotron-3.5-Lightning, zero-shot",
+  "label": "Nemotron-3.5-Lightning",
   "size": "30B (3B active)",
   "n": 330,
   "prompt_tokens": 1014,
   "valid": 1.0,
-  "fields": 0.8727272727272727,
+  "fields": 0.8818181818181818,
   "action": 0.996969696969697,
-  "draft": 0.9363636363636364,
-  "full": 0.8212121212121212,
+  "draft": 0.9606060606060606,
+  "full": 0.8424242424242424,
+  "full_ci": [
+   0.7992020239259339,
+   0.8777657356342887
+  ],
   "halluc": 0.045454545454545456,
   "omit": 0.024242424242424242,
   "by_kind": {
    "cancel_request": 0.7,
    "freight_update": 0.8421052631578947,
-   "quote_request": 0.7884615384615384,
+   "quote_request": 0.8173076923076923,
    "warranty_claim": 0.8666666666666667,
    "where_is_my_part": 0.796875,
-   "yard_offer": 0.8918918918918919
+   "yard_offer": 0.9459459459459459
   },
   "kind_n": {
    "cancel_request": 20,

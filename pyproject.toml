@@ -1,5 +1,5 @@
 [project]
-name = "crm-extract-rl"
+name = "sft-crm-agent"
 version = "0.1.0"
 description = "LoRA SFT of Qwen2.5-1.5B: parts-broker inbox message -> CRM record + rule-checked draft reply"
 requires-python = ">=3.12,<3.13"
