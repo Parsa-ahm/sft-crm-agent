@@ -2,7 +2,7 @@
 name = "crm-extract-rl"
 version = "0.1.0"
 description = "Post-training Qwen2.5-1.5B (SFT + GRPO) to turn a parts broker inbox into CRM records and draft replies"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "torch==2.14.1",
     "transformers==5.18.0",
@@ -19,3 +19,8 @@ torch = { index = "pytorch-cu130" }
 name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
 explicit = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
