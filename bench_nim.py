@@ -1,28 +1,31 @@
-"""Score NIM-hosted models on val with the same prompt + scorer as probe_crm.py (greedy, T=0).
+"""Score NVIDIA NIM-hosted models with the same system prompt and scorer as eval.py (greedy, T=0).
 
-    .venv/bin/python nim_bench.py --model google/gemma-3-4b-it
-Resumable: rows already in data/bench_<model>.jsonl are skipped. Key read from file, never printed.
+    .venv/bin/python bench_nim.py --model openai/gpt-oss-20b --cases data/test.jsonl
+    .venv/bin/python bench_nim.py --model openai/gpt-oss-20b --cases data/test.jsonl --shots 6
+    .venv/bin/python bench_nim.py --model nvidia/nemotron-3.5-lightning-30b-a3b --cases data/test.jsonl --max-tokens 16384
+
+Resumable: ids already in the output file are skipped. API key is read from NIM_KEY_FILE
+(default ~/.config/nim/api-key), never printed.
 """
 import argparse
 import concurrent.futures as cf
 import json
 import os
 import time
-
 import urllib.error
 import urllib.request
 
-from probe_crm import SYSTEM, parse, passes, score
+from eval import full_pass, load_rows, score
+from train import SYSTEM
 
-KEY = open(os.path.expanduser("~/.config/nim/api-key")).read().strip()
+KEY = open(os.path.expanduser(os.environ.get("NIM_KEY_FILE", "~/.config/nim/api-key"))).read().strip()
 URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 
 
 def shot_messages(n):
     """One training example per message kind, as user/assistant turns (from sft.jsonl, never val/test)."""
     seen, msgs = set(), []
-    for line in open("data/final/sft.jsonl"):
-        r = json.loads(line)
+    for r in load_rows("data/sft.jsonl"):
         if r["kind"] in seen or len(seen) >= n:
             continue
         seen.add(r["kind"])
@@ -60,7 +63,7 @@ def call(model, message, max_tokens):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--cases", default="data/final/val.jsonl")
+    ap.add_argument("--cases", default="data/val.jsonl")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--shots", type=int, default=0)
@@ -68,11 +71,10 @@ def main():
     SHOTS.extend(shot_messages(a.shots))
 
     tag = f"_{a.shots}shot" if a.shots else ""
-    split = os.path.splitext(os.path.basename(a.cases))[0]
-    if split != "val":
-        tag += f"_{split}"
-    out = f"data/bench_{a.model.replace('/', '_')}{tag}.jsonl"
-    rows = [json.loads(l) for l in open(a.cases)]
+    tag += "_" + os.path.splitext(os.path.basename(a.cases))[0]
+    os.makedirs("data/runs", exist_ok=True)
+    out = f"data/runs/bench_{a.model.replace('/', '_')}{tag}.jsonl"
+    rows = load_rows(a.cases)
     done = set()
     if os.path.exists(out):
         done = {json.loads(l)["id"] for l in open(out)}
@@ -82,7 +84,7 @@ def main():
     def work(r):
         text, usage = call(a.model, r["message"], a.max_tokens)
         return {"id": r["id"], "kind": r["kind"], "channel": r["channel"], "greedy_text": text,
-                "usage": usage, "greedy": score(parse(text), r)}
+                "usage": usage, "greedy": score(text, r)}
 
     t0 = time.time()
     with open(out, "a") as f, cf.ThreadPoolExecutor(a.workers) as ex:
@@ -104,7 +106,7 @@ def main():
     print(f"=== {a.model} n={len(g)} ===")
     print(f"valid JSON {pct([s['valid'] for s in g])}  all fields {pct([s['fields_ok'] for s in g])}  "
           f"next_action {pct([s['action_ok'] for s in g])}  draft ok {pct([s['draft_ok'] for s in g])}")
-    print(f"full pass {pct([passes(s, 'full') for s in g])}  hallucinated {pct([bool(s['halluc']) for s in g])}")
+    print(f"full pass {pct([full_pass(s) for s in g])}  hallucinated {pct([bool(s['halluc']) for s in g])}")
     pt = [r["usage"].get("prompt_tokens", 0) for r in recs if r.get("usage")]
     if pt:
         print(f"mean prompt tokens {sum(pt) / len(pt):.0f}")

@@ -1,7 +1,7 @@
 [project]
 name = "crm-extract-rl"
 version = "0.1.0"
-description = "Post-training Qwen2.5-1.5B (SFT + GRPO) to turn a parts broker inbox into CRM records and draft replies"
+description = "LoRA SFT of Qwen2.5-1.5B: parts-broker inbox message -> CRM record + rule-checked draft reply"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "torch==2.14.1",

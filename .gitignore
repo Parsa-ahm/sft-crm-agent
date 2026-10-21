@@ -1,5 +1,7 @@
 .venv/
 __pycache__/
+.pytest_cache/
 ckpt/
 *.pid
-data/*.pre_audit.jsonl
+*.log
+_reference/

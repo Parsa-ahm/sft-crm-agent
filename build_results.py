@@ -1,28 +1,30 @@
-"""Build mine/data/results/*.jsonl (held-out test, every model re-scored with mine/eval.py) and print summary JSON.
+"""Re-score every test-set run with eval.py and write data/results/{key}.jsonl + summary.json.
 
-Run from crm-extract-rl/mine:  ../.venv/bin/python /path/build_results.py
+    .venv/bin/python build_results.py
+Runs that have not covered the whole test set are skipped.
 """
 import json
 import os
 import sys
 
-sys.path.insert(0, ".")
-import eval as ev  # Parsa's scorer: verified 800/800 identical to the reference
-
 from transformers import AutoTokenizer
+
+import eval as ev
+from train import MODEL
 
 TEST = "data/test.jsonl"
 RUNS = [  # (key, label, size, source file, kind of source)
-    ("sft", "Qwen2.5-1.5B + LoRA SFT (this work)", "1.5B", "../data/eval_my_sft300_test.jsonl", "eval"),
-    ("base", "Qwen2.5-1.5B-Instruct, zero-shot", "1.5B", "../data/eval_base_test.jsonl", "eval"),
-    ("gptoss0", "gpt-oss-20b, zero-shot", "21B (3.6B active)", "../data/bench_openai_gpt-oss-20b_test.jsonl", "bench"),
-    ("gptoss6", "gpt-oss-20b, 6-shot", "21B (3.6B active)", "../data/bench_openai_gpt-oss-20b_6shot_test.jsonl", "bench"),
+    ("sft", "Qwen2.5-1.5B + LoRA SFT (this work)", "1.5B", "data/runs/sft_test.jsonl", "eval"),
+    ("base", "Qwen2.5-1.5B-Instruct, zero-shot", "1.5B", "data/runs/base_test.jsonl", "eval"),
+    ("gptoss0", "gpt-oss-20b, zero-shot", "21B (3.6B active)", "data/runs/bench_openai_gpt-oss-20b_test.jsonl", "bench"),
+    ("gptoss6", "gpt-oss-20b, 6-shot", "21B (3.6B active)",
+     "data/runs/bench_openai_gpt-oss-20b_6shot_test.jsonl", "bench"),
     ("nemotron", "Nemotron-3.5-Lightning, zero-shot", "30B (3B active)",
-     "../data/bench_nvidia_nemotron-3.5-lightning-30b-a3b_test.jsonl", "bench"),
+     "data/runs/bench_nvidia_nemotron-3.5-lightning-30b-a3b_test.jsonl", "bench"),
 ]
 
 rows = {r["id"]: r for r in ev.load_rows(TEST)}
-tok = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B-Instruct")
+tok = AutoTokenizer.from_pretrained(os.environ.get("MODEL", MODEL))
 local_prompt_tokens = sum(len(tok(ev.build_prompt(tok, r), add_special_tokens=False)["input_ids"])
                           for r in rows.values()) / len(rows)
 
@@ -30,6 +32,7 @@ os.makedirs("data/results", exist_ok=True)
 summary = {}
 for key, label, size, path, kind in RUNS:
     if not os.path.exists(path):
+        print(f"skip {key}: {path} missing", file=sys.stderr)
         continue
     recs = [json.loads(l) for l in open(path)]
     if len(recs) < len(rows):
