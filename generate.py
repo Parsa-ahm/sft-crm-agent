@@ -82,7 +82,10 @@ def nim_call(key, model, messages, max_tokens):
 
 
 def run_nim(model, rows, out, shots, max_tokens, workers):
-    key = open(os.path.expanduser(os.environ.get("NIM_KEY_FILE", "~/.config/nim/api-key"))).read().strip()
+    key_file = os.environ.get("NIM_KEY_FILE")
+    if not key_file:
+        raise SystemExit("set NIM_KEY_FILE to a file containing an NVIDIA NIM API key")
+    key = open(os.path.expanduser(key_file)).read().strip()
     prefix = [{"role": "system", "content": SYSTEM}, *shot_messages(shots)]
     done = {r["id"] for r in load_rows(out)} if os.path.exists(out) else set()
     todo = [r for r in rows if r["id"] not in done]
