@@ -439,7 +439,7 @@ Requires an NVIDIA GPU with 8 GB, CUDA 13, and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync                                    # torch 2.14.1+cu130, transformers 5.18.0
-# set MODEL in train.py to a local copy of Qwen/Qwen2.5-1.5B-Instruct (or its HF id)
+# MODEL in train.py is the HF id; point it at a local copy to skip the download
 
 .venv/bin/python train.py --out ckpt/sft300                      # 10 min on an RTX 2070 Super
 .venv/bin/python generate.py --model ckpt/sft300 --name sft
